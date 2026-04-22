@@ -65,6 +65,7 @@ const LoginPage = ({ onLogin }: { onLogin: (user: any) => void }) => {
 const ArchiveEdit = ({ archive, onSave, onBack }: any) => {
   const [formData, setFormData] = useState(archive || {
     name: '', birthDate: '', gender: '', familyType: '母亲', familyName: '', familyId: '',
+    personalCertType: '身份证', personalCertNo: '',
     birthWeight: '', birthLength: '', deliveryMethod: '', gestationalAge: '', gravidity: '', parity: '', fetusNumber: '', homeAddress: ''
   });
 
@@ -87,6 +88,16 @@ const ArchiveEdit = ({ archive, onSave, onBack }: any) => {
           <Field label="家属类型" required><input value={formData.familyType} disabled className={inputClass}/></Field>
           <Field label="家属姓名" required><input value={formData.familyName} onChange={e=>setFormData({...formData, familyName: e.target.value})} className={inputClass}/></Field>
           <Field label="家属身份证号" required><input value={formData.familyId} onChange={e=>setFormData({...formData, familyId: e.target.value})} className={inputClass}/></Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="本人证件类型" required>
+              <select value={formData.personalCertType} onChange={e=>setFormData({...formData, personalCertType: e.target.value})} className={inputClass}>
+                <option value="身份证">身份证</option>
+                <option value="户口簿">户口簿</option>
+                <option value="其他">其他</option>
+              </select>
+            </Field>
+            <Field label="本人证件号" required><input value={formData.personalCertNo} onChange={e=>setFormData({...formData, personalCertNo: e.target.value})} className={inputClass}/></Field>
+          </div>
         </section>
 
         <section className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
@@ -154,6 +165,7 @@ const OrderStep1 = ({ archive, orderData, onNext, onSaveDraft, onBack }: any) =>
             <div><span className="text-slate-400">{archive.familyType}姓名:</span> {archive.familyName}</div>
           </div>
           <div className="text-sm text-slate-600"><span className="text-slate-400">家属证件号:</span> {archive.familyId}</div>
+          <div className="text-sm text-slate-600 mt-1"><span className="text-slate-400">本人证件:</span> {archive.personalCertType || '-'} / {archive.personalCertNo || '-'}</div>
         </section>
 
         <section className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
@@ -204,7 +216,7 @@ const OrderStep1 = ({ archive, orderData, onNext, onSaveDraft, onBack }: any) =>
 };
 
 // --- Order Flow (Step 2, Confirmation & Payment) ---
-const OrderStep2 = ({ orderData, onNext, onSaveDraft, onBack }: any) => {
+const OrderStep2 = ({ orderData, onNext, onSaveDraft, onBack, onPrev }: any) => {
   const [formData, setFormData] = useState({
     submissionMethod: orderData?.submissionMethod || 'hospital', 
     paymentMethod: orderData?.paymentMethod || '手机新支付', 
@@ -215,7 +227,7 @@ const OrderStep2 = ({ orderData, onNext, onSaveDraft, onBack }: any) => {
   const [isPaid, setIsPaid] = useState(orderData?.isPaid || false);
   const [isPaying, setIsPaying] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = (paidStatus: boolean = isPaid) => {
     let errs: any = {};
     if (formData.submissionMethod === 'hospital' && !formData.sendingHospital) errs.sendingHospital = '请填写医院';
     if (!formData.consent) errs.consent = '须同意知情同意书';
@@ -228,12 +240,20 @@ const OrderStep2 = ({ orderData, onNext, onSaveDraft, onBack }: any) => {
       }
     }
     
-    onNext({ ...orderData, ...formData, isPaid });
+    onNext({ ...orderData, ...formData, isPaid: paidStatus });
   };
 
-  const handlePayment = () => {
+  const handlePayAndSubmit = () => {
+    if (formData.paymentMethod !== '手机新支付' || isPaid) {
+      handleSubmit(isPaid);
+      return;
+    }
     setIsPaying(true);
-    setTimeout(() => { setIsPaying(false); setIsPaid(true); }, 1500);
+    setTimeout(() => {
+      setIsPaying(false);
+      setIsPaid(true);
+      handleSubmit(true);
+    }, 1200);
   };
 
   return (
@@ -285,17 +305,22 @@ const OrderStep2 = ({ orderData, onNext, onSaveDraft, onBack }: any) => {
 
         {formData.paymentMethod === '手机新支付' && !isPaid && (
           <section className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center">
-            <div className="text-rose-600 mb-4"><span className="text-sm font-bold mr-0.5">¥</span><span className="text-3xl font-bold font-mono">280.00</span></div>
-            <button onClick={handlePayment} disabled={isPaying} className="w-full py-4 bg-[#07C160] text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-[#06ad56] transition-all">
-              {isPaying ? <><Loader2 size={20} className="animate-spin"/> 支付中...</> : <><MessageCircle size={20}/> 微信支付</>}
-            </button>
+            <div className="text-rose-600"><span className="text-sm font-bold mr-0.5">¥</span><span className="text-3xl font-bold font-mono">280.00</span></div>
+            <p className="text-xs text-slate-500 mt-2">点击下方按钮后将直接完成支付并进入下一步</p>
+          </section>
+        )}
+        {formData.paymentMethod === '手机新支付' && isPaid && (
+          <section className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+            <p className="text-sm font-medium text-emerald-600">支付成功</p>
           </section>
         )}
 
         <div className="flex gap-3 pt-2">
+          <button onClick={onPrev} className="px-4 py-4 bg-white text-slate-700 border border-slate-300 rounded-xl font-bold shadow-sm hover:bg-slate-50">上一步</button>
           <button onClick={() => onSaveDraft({ ...orderData, ...formData, isPaid })} className="flex-1 py-4 bg-white text-blue-600 border border-blue-600 rounded-xl font-bold shadow-sm hover:bg-blue-50">保存草稿</button>
-          <button onClick={handleSubmit} disabled={formData.paymentMethod === '手机新支付' && !isPaid} className="flex-1 py-4 bg-blue-600 text-white rounded-xl font-bold shadow-lg hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-400">
-            提交采样
+          <button onClick={handlePayAndSubmit} disabled={isPaying} className="flex-1 py-4 bg-blue-600 text-white rounded-xl font-bold shadow-lg hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-400 flex items-center justify-center gap-2">
+            {isPaying && <Loader2 size={18} className="animate-spin" />}
+            {formData.paymentMethod === '手机新支付' && !isPaid ? '支付并提交采样' : '提交采样'}
           </button>
         </div>
       </div>
@@ -305,9 +330,11 @@ const OrderStep2 = ({ orderData, onNext, onSaveDraft, onBack }: any) => {
 
 // --- Order Flow (Step 3, Sampling) ---
 const nurses = ['张护士', '李护士', '王护士'];
-const OrderStep3 = ({ archive, orderData, onComplete, onBack }: any) => {
+const OrderStep3 = ({ archive, orderData, onComplete, onBack, onRefund }: any) => {
   const [formData, setFormData] = useState({ sampleNumber: '', sampler: '', admissionNumber: '' });
   const [errors, setErrors] = useState<any>({});
+  const [showRefundForm, setShowRefundForm] = useState(false);
+  const [refundReason, setRefundReason] = useState('');
 
   const handleSubmit = () => {
     let errs: any = {};
@@ -363,12 +390,83 @@ const OrderStep3 = ({ archive, orderData, onComplete, onBack }: any) => {
           )}
         </section>
         <button onClick={handleSubmit} className="w-full py-4 bg-emerald-600 text-white rounded-xl font-bold shadow-lg hover:bg-emerald-700">完成采样</button>
+        {!orderData?.refundInfo ? (
+          <section className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+            {!showRefundForm ? (
+              <button onClick={() => setShowRefundForm(true)} className="w-full py-3 text-rose-600 border border-rose-200 rounded-xl font-medium hover:bg-rose-50">申请退费</button>
+            ) : (
+              <div className="space-y-3">
+                <div className="text-sm text-slate-600">退费项目：{orderData?.testItems?.join('、') || '当前筛查项目'}</div>
+                <div className="text-sm text-slate-600">退费金额：¥280.00</div>
+                <textarea value={refundReason} onChange={(e) => setRefundReason(e.target.value)} className={inputClass + " h-20 resize-none"} placeholder="请输入退费原因" />
+                <button onClick={() => onRefund(refundReason)} disabled={!refundReason.trim()} className="w-full py-3 bg-rose-600 text-white rounded-xl disabled:opacity-50">确认退费</button>
+              </div>
+            )}
+          </section>
+        ) : (
+          <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm py-3 px-4 rounded-xl font-medium">已退费</div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const StatusDetailPage = ({ order, archive, onBack, onMarkProcessing, onMarkCompleted, onPrevStep, onRefund }: any) => {
+  const [showRefundForm, setShowRefundForm] = useState(false);
+  const [refundReason, setRefundReason] = useState('');
+  const history = order?.history || [];
+  return (
+    <div className="min-h-screen bg-slate-50 pb-20">
+      <div className="sticky top-0 bg-white/90 backdrop-blur-md px-4 py-3 flex items-center gap-3 border-b border-slate-100 z-50">
+        <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full"><ChevronLeft size={20} /></button>
+        <h2 className="font-bold text-lg text-slate-800">订单进度详情</h2>
+      </div>
+      <div className="p-4 space-y-4">
+        <section className="bg-white p-5 rounded-2xl border border-slate-100">
+          <div className="text-sm text-slate-600 space-y-1">
+            <div>新生儿：{archive?.name}</div>
+            <div>当前状态：{order?.status === 'pending_receive' ? '待接收' : order?.status === 'processing' ? '检测中' : '已发布'}</div>
+            <div>缴费方式：{order?.paymentMethod || '未记录'} {order?.isPaid ? '(已支付)' : ''}</div>
+            <div>申请时间：{order?.submittedAt || '-'}</div>
+          </div>
+        </section>
+        <section className="bg-white p-5 rounded-2xl border border-slate-100">
+          <h3 className="font-bold text-slate-700 mb-3">历史状态节点</h3>
+          <div className="space-y-2">
+            {history.length === 0 ? <p className="text-sm text-slate-400">暂无节点</p> : history.map((h: any, idx: number) => (
+              <div key={idx} className="text-sm flex justify-between border-b border-slate-100 pb-2">
+                <span className="text-slate-700">{h.label}</span><span className="text-slate-500">{h.time}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+        {order?.status === 'pending_receive' && order?.paymentMethod === '院内已支付' && (
+          <button onClick={onPrevStep} className="w-full py-3 bg-white border border-slate-300 rounded-xl text-slate-700 font-medium">上一步</button>
+        )}
+        {order?.status === 'pending_receive' && <button onClick={onMarkProcessing} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold">确认样本接收</button>}
+        {order?.status === 'processing' && <button onClick={onMarkCompleted} className="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold">发布检测报告</button>}
+        {!order?.refundInfo ? (
+          <section className="bg-white p-4 rounded-2xl border border-slate-100">
+            {!showRefundForm ? (
+              <button onClick={() => setShowRefundForm(true)} className="w-full py-3 text-rose-600 border border-rose-200 rounded-xl font-medium hover:bg-rose-50">申请退费</button>
+            ) : (
+              <div className="space-y-3">
+                <div className="text-sm text-slate-600">退费项目：{order?.testItems?.join('、') || '筛查项目'}</div>
+                <div className="text-sm text-slate-600">退费金额：¥280.00</div>
+                <textarea value={refundReason} onChange={(e) => setRefundReason(e.target.value)} className={inputClass + " h-20 resize-none"} placeholder="请输入退费原因" />
+                <button onClick={() => onRefund(refundReason)} disabled={!refundReason.trim()} className="w-full py-3 bg-rose-600 text-white rounded-xl disabled:opacity-50">确认退费</button>
+              </div>
+            )}
+          </section>
+        ) : <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm py-3 px-4 rounded-xl font-medium">已退费</div>}
       </div>
     </div>
   );
 };
 
 // --- Dashboard ---
+const terminalEventStatuses = ['已终止', '终止', 'terminated'];
+const nowText = () => new Date().toLocaleString();
 const Dashboard = ({ user, archives, events, orders, onNewArchive, onEditArchive, onNewOrder, onClickOrder, onLogout }: any) => {
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
@@ -416,6 +514,7 @@ const Dashboard = ({ user, archives, events, orders, onNewArchive, onEditArchive
                     <div className="divide-y divide-slate-100">
                       {archiveEvents.map((event: any) => {
                         const eventOrders = orders.filter((o: any) => o.eventId === event.id);
+                        const isTerminalEvent = terminalEventStatuses.includes(event.status);
                         return (
                           <div key={event.id} className="p-4 bg-white">
                             <div className="flex justify-between items-center mb-3">
@@ -434,21 +533,26 @@ const Dashboard = ({ user, archives, events, orders, onNewArchive, onEditArchive
                                   <div>
                                     <div className="text-sm font-bold text-slate-800 line-clamp-1">{order.testItems?.join('、') || '信息录入中...'}</div>
                                     <div className="text-xs text-slate-500 mt-0.5">单号: {order.id.slice(-6)}</div>
+                                    <div className="text-xs text-slate-400 mt-0.5">送检时间: {order.submittedAt || '-'}</div>
                                   </div>
                                   <div>
                                     {order.status === 'step1' && <span className="bg-slate-200 text-slate-600 text-xs px-2 py-1 rounded-md">待录入</span>}
                                     {order.status === 'step2' && <span className="bg-orange-100 text-orange-600 text-xs px-2 py-1 rounded-md">待收费(选项目)</span>}
                                     {order.status === 'step2_pay' && <span className="bg-rose-100 text-rose-600 text-xs px-2 py-1 rounded-md">待收费</span>}
                                     {order.status === 'step3' && <span className="bg-blue-100 text-blue-600 text-xs px-2 py-1 rounded-md">待采样</span>}
+                                    {order.status === 'pending_receive' && <span className="bg-cyan-100 text-cyan-700 text-xs px-2 py-1 rounded-md">待接收</span>}
                                     {order.status === 're_sampling' && <span className="bg-red-100 text-red-600 text-xs px-2 py-1 rounded-md font-bold shadow-sm shadow-red-200 border border-red-200">重采血</span>}
                                     {order.status === 'processing' && <span className="bg-indigo-100 text-indigo-600 text-xs px-2 py-1 rounded-md">检测中</span>}
                                     {order.status === 'completed' && <span className="bg-emerald-100 text-emerald-600 text-xs px-2 py-1 rounded-md">已发布</span>}
-                                    {order.status === 'recall_pending' && <span className="bg-rose-100 text-rose-700 text-xs px-2 py-1 rounded-md font-bold shadow-sm shadow-rose-200 border border-rose-200">待召回(异常)</span>}
+                                    {order.status === 'recall_pending' && <span className="bg-rose-100 text-rose-700 text-xs px-2 py-1 rounded-md font-bold shadow-sm shadow-rose-200 border border-rose-200">已发布 ❗</span>}
+                                    {order.refundInfo && <span className="ml-1 bg-amber-100 text-amber-700 text-xs px-2 py-1 rounded-md">已退费</span>}
                                   </div>
                                 </div>
                               ))}
                             </div>
-                            <button onClick={() => onNewOrder(event.id)} className="w-full py-2.5 border border-dashed border-blue-200 text-blue-600 rounded-xl text-sm font-medium hover:bg-blue-50">+ 新增检验订单</button>
+                            <button onClick={() => onNewOrder(event)} className="w-full py-2.5 border border-dashed border-blue-200 text-blue-600 rounded-xl text-sm font-medium hover:bg-blue-50">
+                              {isTerminalEvent ? '+ 新申请检验（新筛查事件）' : '+ 新增检验订单'}
+                            </button>
                           </div>
                         )
                       })}
@@ -465,8 +569,11 @@ const Dashboard = ({ user, archives, events, orders, onNewArchive, onEditArchive
 };
 
 // --- Report View (For completed & recall_pending) ---
-const ReportView = ({ order, event, archive, onBack, onNewRetest }: any) => {
+const ReportView = ({ order, event, archive, onBack, onNewRetest, onRefund }: any) => {
   const isAbnormal = order.status === 'recall_pending';
+  const canCreateRetest = isAbnormal && !order?.retestRequested;
+  const [showRefundForm, setShowRefundForm] = useState(false);
+  const [refundReason, setRefundReason] = useState('');
   return (
     <div className="min-h-screen bg-slate-100 pb-20">
       <div className="sticky top-0 bg-white/80 backdrop-blur-md px-4 py-3 flex items-center gap-3 border-b border-slate-200 z-50">
@@ -525,11 +632,25 @@ const ReportView = ({ order, event, archive, onBack, onNewRetest }: any) => {
           </div>
         </div>
 
-        {isAbnormal && (
+        {canCreateRetest && (
           <button onClick={() => onNewRetest(event?.id)} className="w-full py-4 mt-6 bg-rose-600 text-white rounded-xl font-bold shadow-lg shadow-rose-600/30 hover:bg-rose-700 transition-all flex justify-center items-center gap-2">
             <Plus size={20}/> 新增复查项目订单
           </button>
         )}
+        {!order?.refundInfo ? (
+          <section className="bg-white p-4 rounded-xl mt-4 border border-slate-100">
+            {!showRefundForm ? (
+              <button onClick={() => setShowRefundForm(true)} className="w-full py-3 text-rose-600 border border-rose-200 rounded-xl font-medium hover:bg-rose-50">申请退费</button>
+            ) : (
+              <div className="space-y-3">
+                <div className="text-sm text-slate-600">退费项目：{order?.testItems?.join('、') || '筛查项目'}</div>
+                <div className="text-sm text-slate-600">退费金额：¥280.00</div>
+                <textarea value={refundReason} onChange={(e) => setRefundReason(e.target.value)} className={inputClass + " h-20 resize-none"} placeholder="请输入退费原因" />
+                <button onClick={() => onRefund(refundReason)} disabled={!refundReason.trim()} className="w-full py-3 bg-rose-600 text-white rounded-xl disabled:opacity-50">确认退费</button>
+              </div>
+            )}
+          </section>
+        ) : <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm py-3 px-4 rounded-xl mt-4 font-medium">已退费</div>}
       </div>
     </div>
   );
@@ -538,11 +659,12 @@ const ReportView = ({ order, event, archive, onBack, onNewRetest }: any) => {
 
 // --- App Root ---
 export default function App() {
-  const [view, setView] = useState('login');
+  const [viewStack, setViewStack] = useState<string[]>(['login']);
+  const view = viewStack[viewStack.length - 1];
   const [user, setUser] = useState<any>(null);
   
   const [archives, setArchives] = useState<any[]>([
-    { id: 'a1', name: '大宝', birthDate: '2023-10-01', gender: '男', familyType: '母亲', familyName: '王丽', familyId: '310105199001011234' }
+    { id: 'a1', name: '大宝', birthDate: '2023-10-01', gender: '男', familyType: '母亲', familyName: '王丽', familyId: '310105199001011234', personalCertType: '身份证', personalCertNo: '310105202310011234' }
   ]);
   const [events, setEvents] = useState<any[]>([
     { id: 'e1', archiveId: 'a1', title: '新生儿代谢及听力基础筛查', status: '待召回' }
@@ -556,26 +678,43 @@ export default function App() {
   const [activeArchive, setActiveArchive] = useState<any>(null);
   const [activeOrder, setActiveOrder] = useState<any>(null);
 
+  const navigate = (nextView: string, options: { replace?: boolean; reset?: boolean } = {}) => {
+    setViewStack((prev) => {
+      if (options.reset) return [nextView];
+      if (options.replace) return [...prev.slice(0, -1), nextView];
+      return [...prev, nextView];
+    });
+  };
+
+  const goBack = (fallbackView = 'dashboard') => {
+    setViewStack((prev) => (prev.length > 1 ? prev.slice(0, -1) : [fallbackView]));
+  };
+
   const handleOrderAction = (order: any) => {
     setActiveOrder(order);
     // routes 're_sampling' into step3 to reuse the form
-    setView(order.status === 're_sampling' ? 'step3' : order.status);
+    navigate(order.status === 're_sampling' ? 'step3' : order.status);
   };
 
   const updateOrder = (updates: any, nextView: string = 'dashboard') => {
     setOrders(orders.map(o => o.id === updates.id ? updates : o));
     setActiveOrder(updates);
-    setView(nextView);
+    navigate(nextView, nextView === 'dashboard' ? { reset: true } : { replace: true });
   };
 
-  if (view === 'login') return <LoginPage onLogin={(u) => { setUser(u); setView('dashboard'); }} />;
+  if (view === 'login') return <LoginPage onLogin={(u) => { setUser(u); navigate('dashboard', { reset: true }); }} />;
   if (view === 'dashboard') return (
     <Dashboard user={user} archives={archives} events={events} orders={orders} 
-      onLogout={() => setView('login')}
-      onNewArchive={() => { setActiveArchive(null); setView('archiveEdit'); }}
-      onEditArchive={(a: any) => { setActiveArchive(a); setView('archiveEdit'); }}
-      onNewOrder={(eventId: string) => {
-        const newOrder = { id: 'order_' + Date.now().toString().slice(-6), eventId, status: 'step1' };
+      onLogout={() => navigate('login', { reset: true })}
+      onNewArchive={() => { setActiveArchive(null); navigate('archiveEdit'); }}
+      onEditArchive={(a: any) => { setActiveArchive(a); navigate('archiveEdit'); }}
+      onNewOrder={(event: any) => {
+        const shouldCreateNewEvent = terminalEventStatuses.includes(event.status);
+        const eventId = shouldCreateNewEvent ? `e_${Date.now()}` : event.id;
+        if (shouldCreateNewEvent) {
+          setEvents([...events, { id: eventId, archiveId: event.archiveId, title: `${event.title}-新申请`, status: '待筛查' }]);
+        }
+        const newOrder = { id: 'order_' + Date.now().toString().slice(-6), eventId, status: 'step1', history: [{ label: '订单创建', time: nowText() }] };
         setOrders([...orders, newOrder]);
         handleOrderAction(newOrder);
       }}
@@ -583,14 +722,14 @@ export default function App() {
     />
   );
   if (view === 'archiveEdit') return (
-    <ArchiveEdit archive={activeArchive} onBack={() => setView('dashboard')} onSave={(a: any) => {
+    <ArchiveEdit archive={activeArchive} onBack={() => goBack()} onSave={(a: any) => {
       const isNew = !activeArchive;
       setArchives(isNew ? [...archives, a] : archives.map(arch => arch.id === a.id ? a : arch));
       // Optionally auto-create an event if it's a new archive
       if (isNew) {
         setEvents([...events, { id: 'e_' + Date.now(), archiveId: a.id, title: '常规新生儿遗传病筛查', status: '待筛查' }]);
       }
-      setView('dashboard');
+      navigate('dashboard', { reset: true });
     }}/>
   );
 
@@ -598,38 +737,56 @@ export default function App() {
   const eventRef = activeOrder ? events.find(e => e.id === activeOrder.eventId) : null;
   const archiveRef = eventRef ? archives.find(a => a.id === eventRef.archiveId) : null;
   
-  if (view === 'step1') return <OrderStep1 archive={archiveRef} orderData={activeOrder} onBack={() => setView('dashboard')} 
+  if (view === 'step1') return <OrderStep1 archive={archiveRef} orderData={activeOrder} onBack={() => goBack()} 
     onSaveDraft={(data: any) => updateOrder({...activeOrder, ...data, status: 'step1'}, 'dashboard')} 
     onNext={(data: any) => {
       setArchives(archives.map(a => a.id === archiveRef?.id ? { ...a, ...data } : a));
       updateOrder({...activeOrder, ...data, status: 'step2'}, 'step2');
     }}
   />;
-  if (view === 'step2') return <OrderStep2 orderData={activeOrder} onBack={() => setView('step1')} 
+  if (view === 'step2') return <OrderStep2 orderData={activeOrder} onBack={() => goBack()} 
+    onPrev={() => navigate('step1', { replace: true })}
     onSaveDraft={(data: any) => updateOrder({...activeOrder, ...data, status: 'step2'}, 'dashboard')}
     onNext={(data: any) => {
-      updateOrder({...activeOrder, ...data, status: 'step3'}, 'step3');
+      const submitTime = nowText();
+      updateOrder({
+        ...activeOrder,
+        ...data,
+        submittedAt: submitTime,
+        status: 'step3',
+        history: [...(activeOrder?.history || []), { label: '订单提交/缴费完成', time: submitTime }, { label: '待采样', time: submitTime }]
+      }, 'step3');
     }}
   />;
-  if (view === 'step3') return <OrderStep3 archive={archiveRef} orderData={activeOrder} onBack={() => setView('step2')} onComplete={(data: any) => updateOrder({...activeOrder, ...data, status: 'processing'}, 'processing')} />;
+  if (view === 'step3') return <OrderStep3 archive={archiveRef} orderData={activeOrder} onBack={() => goBack()} 
+    onRefund={(reason: string) => updateOrder({
+      ...activeOrder,
+      refundInfo: { items: activeOrder?.testItems || [], amount: 280, reason, refundedAt: nowText() },
+      history: [...(activeOrder?.history || []), { label: '退费成功', time: nowText() }]
+    }, 'step3')}
+    onComplete={(data: any) => {
+      const receiveTime = nowText();
+      updateOrder({...activeOrder, ...data, status: 'pending_receive', history: [...(activeOrder?.history || []), { label: '采样完成', time: receiveTime }, { label: '待接收', time: receiveTime }]}, 'pending_receive');
+    }} />;
   
-  // generic fallback for processing/completed
-  if (view === 'processing' || view === 'completed' || view === 'recall_pending') {
-    if (view === 'processing') return (
-      <div className="min-h-screen bg-slate-50 flex flex-col pt-20 items-center px-4">
-        <Loader2 size={64} className="text-blue-500 mb-4 animate-spin" />
-        <h2 className="text-xl font-bold mb-6 text-slate-800">检测正在进行中</h2>
-        <p className="text-slate-500 mb-8 text-center text-sm">实验室已接收样本，正在化验分析，请耐心等待。</p>
-        <button onClick={() => setView('dashboard')} className="px-8 py-3 bg-white border border-slate-200 text-slate-700 font-medium rounded-xl shadow-sm">返回首页</button>
-      </div>
-    );
-
-    return <ReportView order={activeOrder} event={eventRef} archive={archiveRef} onBack={() => setView('dashboard')} 
+  // generic fallback for order status pages
+  if (view === 'pending_receive' || view === 'processing') {
+    return <StatusDetailPage order={activeOrder} archive={archiveRef} onBack={() => goBack()}
+      onPrevStep={() => navigate('step3', { replace: true })}
+      onMarkProcessing={() => updateOrder({ ...activeOrder, status: 'processing', history: [...(activeOrder?.history || []), { label: '样本已接收', time: nowText() }, { label: '检测中', time: nowText() }] }, 'processing')}
+      onMarkCompleted={() => updateOrder({ ...activeOrder, status: 'completed', history: [...(activeOrder?.history || []), { label: '已发布', time: nowText() }] }, 'completed')}
+      onRefund={(reason: string) => updateOrder({ ...activeOrder, refundInfo: { items: activeOrder?.testItems || [], amount: 280, reason, refundedAt: nowText() }, history: [...(activeOrder?.history || []), { label: '退费成功', time: nowText() }] }, view)}
+    />;
+  }
+  if (view === 'completed' || view === 'recall_pending') {
+    return <ReportView order={activeOrder} event={eventRef} archive={archiveRef} onBack={() => goBack()} 
       onNewRetest={(eventId: string) => {
-        const newOrder = { id: 'order_retest_' + Date.now().toString().slice(-6), eventId, status: 'step1' };
-        setOrders([...orders, newOrder]);
+        const newOrder = { id: 'order_retest_' + Date.now().toString().slice(-6), eventId, status: 'step1', history: [{ label: '复查订单创建', time: nowText() }] };
+        setOrders(orders.map((o) => (o.id === activeOrder?.id ? { ...o, retestRequested: true } : o)).concat(newOrder));
+        setActiveOrder({ ...activeOrder, retestRequested: true });
         handleOrderAction(newOrder);
-      }} 
+      }}
+      onRefund={(reason: string) => updateOrder({ ...activeOrder, refundInfo: { items: activeOrder?.testItems || [], amount: 280, reason, refundedAt: nowText() }, history: [...(activeOrder?.history || []), { label: '退费成功', time: nowText() }] }, view)}
     />;
   }
 
