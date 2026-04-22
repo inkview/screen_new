@@ -216,7 +216,7 @@ const OrderStep1 = ({ archive, orderData, onNext, onSaveDraft, onBack }: any) =>
 };
 
 // --- Order Flow (Step 2, Confirmation & Payment) ---
-const OrderStep2 = ({ orderData, onNext, onSaveDraft, onBack, onPrev }: any) => {
+const OrderStep2 = ({ orderData, onNext, onSaveDraft, onBack, onRefund }: any) => {
   const [formData, setFormData] = useState({
     submissionMethod: orderData?.submissionMethod || 'hospital', 
     paymentMethod: orderData?.paymentMethod || '手机新支付', 
@@ -226,6 +226,8 @@ const OrderStep2 = ({ orderData, onNext, onSaveDraft, onBack, onPrev }: any) => 
   const [errors, setErrors] = useState<any>({});
   const [isPaid, setIsPaid] = useState(orderData?.isPaid || false);
   const [isPaying, setIsPaying] = useState(false);
+  const [isRefunding, setIsRefunding] = useState(false);
+  const [refundNote, setRefundNote] = useState(orderData?.refundNote || '');
 
   const handleSubmit = (paidStatus: boolean = isPaid) => {
     let errs: any = {};
@@ -240,7 +242,7 @@ const OrderStep2 = ({ orderData, onNext, onSaveDraft, onBack, onPrev }: any) => 
       }
     }
     
-    onNext({ ...orderData, ...formData, isPaid: paidStatus });
+    onNext({ ...orderData, ...formData, isPaid: paidStatus, refundNote });
   };
 
   const handlePayAndSubmit = () => {
@@ -252,8 +254,20 @@ const OrderStep2 = ({ orderData, onNext, onSaveDraft, onBack, onPrev }: any) => 
     setTimeout(() => {
       setIsPaying(false);
       setIsPaid(true);
+      setRefundNote('');
       handleSubmit(true);
     }, 1200);
+  };
+
+  const handleRefund = () => {
+    setIsRefunding(true);
+    setTimeout(() => {
+      setIsRefunding(false);
+      setIsPaid(false);
+      const note = `已退款(${new Date().toLocaleString()})`;
+      setRefundNote(note);
+      onRefund?.({ ...orderData, ...formData, isPaid: false, refundNote: note, status: 'step2' });
+    }, 1000);
   };
 
   return (
@@ -311,13 +325,20 @@ const OrderStep2 = ({ orderData, onNext, onSaveDraft, onBack, onPrev }: any) => 
         )}
         {formData.paymentMethod === '手机新支付' && isPaid && (
           <section className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
-            <p className="text-sm font-medium text-emerald-600">支付成功</p>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-emerald-600">支付成功</p>
+                {refundNote && <p className="text-xs text-amber-600 mt-1">{refundNote}</p>}
+              </div>
+              <button onClick={handleRefund} disabled={isRefunding} className="px-4 py-2 bg-rose-600 text-white text-sm rounded-lg hover:bg-rose-700 disabled:opacity-60">
+                {isRefunding ? '退款中...' : '申请退费'}
+              </button>
+            </div>
           </section>
         )}
 
         <div className="flex gap-3 pt-2">
-          <button onClick={onPrev} className="px-4 py-4 bg-white text-slate-700 border border-slate-300 rounded-xl font-bold shadow-sm hover:bg-slate-50">上一步</button>
-          <button onClick={() => onSaveDraft({ ...orderData, ...formData, isPaid })} className="flex-1 py-4 bg-white text-blue-600 border border-blue-600 rounded-xl font-bold shadow-sm hover:bg-blue-50">保存草稿</button>
+          <button onClick={() => onSaveDraft({ ...orderData, ...formData, isPaid, refundNote })} className="flex-1 py-4 bg-white text-blue-600 border border-blue-600 rounded-xl font-bold shadow-sm hover:bg-blue-50">保存草稿</button>
           <button onClick={handlePayAndSubmit} disabled={isPaying} className="flex-1 py-4 bg-blue-600 text-white rounded-xl font-bold shadow-lg hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-400 flex items-center justify-center gap-2">
             {isPaying && <Loader2 size={18} className="animate-spin" />}
             {formData.paymentMethod === '手机新支付' && !isPaid ? '支付并提交采样' : '提交采样'}
@@ -466,7 +487,6 @@ const StatusDetailPage = ({ order, archive, onBack, onMarkProcessing, onMarkComp
 
 // --- Dashboard ---
 const terminalEventStatuses = ['已终止', '终止', 'terminated'];
-const nowText = () => new Date().toLocaleString();
 const Dashboard = ({ user, archives, events, orders, onNewArchive, onEditArchive, onNewOrder, onClickOrder, onLogout }: any) => {
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
@@ -572,8 +592,6 @@ const Dashboard = ({ user, archives, events, orders, onNewArchive, onEditArchive
 const ReportView = ({ order, event, archive, onBack, onNewRetest, onRefund }: any) => {
   const isAbnormal = order.status === 'recall_pending';
   const canCreateRetest = isAbnormal && !order?.retestRequested;
-  const [showRefundForm, setShowRefundForm] = useState(false);
-  const [refundReason, setRefundReason] = useState('');
   return (
     <div className="min-h-screen bg-slate-100 pb-20">
       <div className="sticky top-0 bg-white/80 backdrop-blur-md px-4 py-3 flex items-center gap-3 border-b border-slate-200 z-50">
@@ -714,7 +732,7 @@ export default function App() {
         if (shouldCreateNewEvent) {
           setEvents([...events, { id: eventId, archiveId: event.archiveId, title: `${event.title}-新申请`, status: '待筛查' }]);
         }
-        const newOrder = { id: 'order_' + Date.now().toString().slice(-6), eventId, status: 'step1', history: [{ label: '订单创建', time: nowText() }] };
+        const newOrder = { id: 'order_' + Date.now().toString().slice(-6), eventId, status: 'step1' };
         setOrders([...orders, newOrder]);
         handleOrderAction(newOrder);
       }}
@@ -745,7 +763,6 @@ export default function App() {
     }}
   />;
   if (view === 'step2') return <OrderStep2 orderData={activeOrder} onBack={() => goBack()} 
-    onPrev={() => navigate('step1', { replace: true })}
     onSaveDraft={(data: any) => updateOrder({...activeOrder, ...data, status: 'step2'}, 'dashboard')}
     onNext={(data: any) => {
       const submitTime = nowText();
@@ -757,31 +774,24 @@ export default function App() {
         history: [...(activeOrder?.history || []), { label: '订单提交/缴费完成', time: submitTime }, { label: '待采样', time: submitTime }]
       }, 'step3');
     }}
+    onRefund={(data: any) => updateOrder(data, 'step2')}
   />;
-  if (view === 'step3') return <OrderStep3 archive={archiveRef} orderData={activeOrder} onBack={() => goBack()} 
-    onRefund={(reason: string) => updateOrder({
-      ...activeOrder,
-      refundInfo: { items: activeOrder?.testItems || [], amount: 280, reason, refundedAt: nowText() },
-      history: [...(activeOrder?.history || []), { label: '退费成功', time: nowText() }]
-    }, 'step3')}
-    onComplete={(data: any) => {
-      const receiveTime = nowText();
-      updateOrder({...activeOrder, ...data, status: 'pending_receive', history: [...(activeOrder?.history || []), { label: '采样完成', time: receiveTime }, { label: '待接收', time: receiveTime }]}, 'pending_receive');
-    }} />;
+  if (view === 'step3') return <OrderStep3 archive={archiveRef} orderData={activeOrder} onBack={() => goBack()} onComplete={(data: any) => updateOrder({...activeOrder, ...data, status: 'processing'}, 'processing')} />;
   
-  // generic fallback for order status pages
-  if (view === 'pending_receive' || view === 'processing') {
-    return <StatusDetailPage order={activeOrder} archive={archiveRef} onBack={() => goBack()}
-      onPrevStep={() => navigate('step3', { replace: true })}
-      onMarkProcessing={() => updateOrder({ ...activeOrder, status: 'processing', history: [...(activeOrder?.history || []), { label: '样本已接收', time: nowText() }, { label: '检测中', time: nowText() }] }, 'processing')}
-      onMarkCompleted={() => updateOrder({ ...activeOrder, status: 'completed', history: [...(activeOrder?.history || []), { label: '已发布', time: nowText() }] }, 'completed')}
-      onRefund={(reason: string) => updateOrder({ ...activeOrder, refundInfo: { items: activeOrder?.testItems || [], amount: 280, reason, refundedAt: nowText() }, history: [...(activeOrder?.history || []), { label: '退费成功', time: nowText() }] }, view)}
-    />;
-  }
-  if (view === 'completed' || view === 'recall_pending') {
+  // generic fallback for processing/completed
+  if (view === 'processing' || view === 'completed' || view === 'recall_pending') {
+    if (view === 'processing') return (
+      <div className="min-h-screen bg-slate-50 flex flex-col pt-20 items-center px-4">
+        <Loader2 size={64} className="text-blue-500 mb-4 animate-spin" />
+        <h2 className="text-xl font-bold mb-6 text-slate-800">检测正在进行中</h2>
+        <p className="text-slate-500 mb-8 text-center text-sm">实验室已接收样本，正在化验分析，请耐心等待。</p>
+        <button onClick={() => navigate('dashboard', { reset: true })} className="px-8 py-3 bg-white border border-slate-200 text-slate-700 font-medium rounded-xl shadow-sm">返回首页</button>
+      </div>
+    );
+
     return <ReportView order={activeOrder} event={eventRef} archive={archiveRef} onBack={() => goBack()} 
       onNewRetest={(eventId: string) => {
-        const newOrder = { id: 'order_retest_' + Date.now().toString().slice(-6), eventId, status: 'step1', history: [{ label: '复查订单创建', time: nowText() }] };
+        const newOrder = { id: 'order_retest_' + Date.now().toString().slice(-6), eventId, status: 'step1' };
         setOrders(orders.map((o) => (o.id === activeOrder?.id ? { ...o, retestRequested: true } : o)).concat(newOrder));
         setActiveOrder({ ...activeOrder, retestRequested: true });
         handleOrderAction(newOrder);
