@@ -204,7 +204,7 @@ const OrderStep1 = ({ archive, orderData, onNext, onSaveDraft, onBack }: any) =>
 };
 
 // --- Order Flow (Step 2, Confirmation & Payment) ---
-const OrderStep2 = ({ orderData, onNext, onSaveDraft, onBack }: any) => {
+const OrderStep2 = ({ orderData, onNext, onSaveDraft, onBack, onRefund }: any) => {
   const [formData, setFormData] = useState({
     submissionMethod: orderData?.submissionMethod || 'hospital', 
     paymentMethod: orderData?.paymentMethod || '手机新支付', 
@@ -214,8 +214,10 @@ const OrderStep2 = ({ orderData, onNext, onSaveDraft, onBack }: any) => {
   const [errors, setErrors] = useState<any>({});
   const [isPaid, setIsPaid] = useState(orderData?.isPaid || false);
   const [isPaying, setIsPaying] = useState(false);
+  const [isRefunding, setIsRefunding] = useState(false);
+  const [refundNote, setRefundNote] = useState(orderData?.refundNote || '');
 
-  const handleSubmit = () => {
+  const handleSubmit = (paidStatus: boolean = isPaid) => {
     let errs: any = {};
     if (formData.submissionMethod === 'hospital' && !formData.sendingHospital) errs.sendingHospital = '请填写医院';
     if (!formData.consent) errs.consent = '须同意知情同意书';
@@ -228,12 +230,32 @@ const OrderStep2 = ({ orderData, onNext, onSaveDraft, onBack }: any) => {
       }
     }
     
-    onNext({ ...orderData, ...formData, isPaid });
+    onNext({ ...orderData, ...formData, isPaid: paidStatus, refundNote });
   };
 
-  const handlePayment = () => {
+  const handlePayAndSubmit = () => {
+    if (formData.paymentMethod !== '手机新支付' || isPaid) {
+      handleSubmit(isPaid);
+      return;
+    }
     setIsPaying(true);
-    setTimeout(() => { setIsPaying(false); setIsPaid(true); }, 1500);
+    setTimeout(() => {
+      setIsPaying(false);
+      setIsPaid(true);
+      setRefundNote('');
+      handleSubmit(true);
+    }, 1200);
+  };
+
+  const handleRefund = () => {
+    setIsRefunding(true);
+    setTimeout(() => {
+      setIsRefunding(false);
+      setIsPaid(false);
+      const note = `已退款(${new Date().toLocaleString()})`;
+      setRefundNote(note);
+      onRefund?.({ ...orderData, ...formData, isPaid: false, refundNote: note, status: 'step2' });
+    }, 1000);
   };
 
   return (
@@ -285,17 +307,29 @@ const OrderStep2 = ({ orderData, onNext, onSaveDraft, onBack }: any) => {
 
         {formData.paymentMethod === '手机新支付' && !isPaid && (
           <section className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center">
-            <div className="text-rose-600 mb-4"><span className="text-sm font-bold mr-0.5">¥</span><span className="text-3xl font-bold font-mono">280.00</span></div>
-            <button onClick={handlePayment} disabled={isPaying} className="w-full py-4 bg-[#07C160] text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-[#06ad56] transition-all">
-              {isPaying ? <><Loader2 size={20} className="animate-spin"/> 支付中...</> : <><MessageCircle size={20}/> 微信支付</>}
-            </button>
+            <div className="text-rose-600"><span className="text-sm font-bold mr-0.5">¥</span><span className="text-3xl font-bold font-mono">280.00</span></div>
+            <p className="text-xs text-slate-500 mt-2">点击下方按钮后将直接完成支付并进入下一步</p>
+          </section>
+        )}
+        {formData.paymentMethod === '手机新支付' && isPaid && (
+          <section className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-emerald-600">支付成功</p>
+                {refundNote && <p className="text-xs text-amber-600 mt-1">{refundNote}</p>}
+              </div>
+              <button onClick={handleRefund} disabled={isRefunding} className="px-4 py-2 bg-rose-600 text-white text-sm rounded-lg hover:bg-rose-700 disabled:opacity-60">
+                {isRefunding ? '退款中...' : '申请退费'}
+              </button>
+            </div>
           </section>
         )}
 
         <div className="flex gap-3 pt-2">
-          <button onClick={() => onSaveDraft({ ...orderData, ...formData, isPaid })} className="flex-1 py-4 bg-white text-blue-600 border border-blue-600 rounded-xl font-bold shadow-sm hover:bg-blue-50">保存草稿</button>
-          <button onClick={handleSubmit} disabled={formData.paymentMethod === '手机新支付' && !isPaid} className="flex-1 py-4 bg-blue-600 text-white rounded-xl font-bold shadow-lg hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-400">
-            提交采样
+          <button onClick={() => onSaveDraft({ ...orderData, ...formData, isPaid, refundNote })} className="flex-1 py-4 bg-white text-blue-600 border border-blue-600 rounded-xl font-bold shadow-sm hover:bg-blue-50">保存草稿</button>
+          <button onClick={handlePayAndSubmit} disabled={isPaying} className="flex-1 py-4 bg-blue-600 text-white rounded-xl font-bold shadow-lg hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-400 flex items-center justify-center gap-2">
+            {isPaying && <Loader2 size={18} className="animate-spin" />}
+            {formData.paymentMethod === '手机新支付' && !isPaid ? '支付并提交采样' : '提交采样'}
           </button>
         </div>
       </div>
@@ -369,6 +403,7 @@ const OrderStep3 = ({ archive, orderData, onComplete, onBack }: any) => {
 };
 
 // --- Dashboard ---
+const terminalEventStatuses = ['已终止', '终止', 'terminated'];
 const Dashboard = ({ user, archives, events, orders, onNewArchive, onEditArchive, onNewOrder, onClickOrder, onLogout }: any) => {
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
@@ -416,6 +451,7 @@ const Dashboard = ({ user, archives, events, orders, onNewArchive, onEditArchive
                     <div className="divide-y divide-slate-100">
                       {archiveEvents.map((event: any) => {
                         const eventOrders = orders.filter((o: any) => o.eventId === event.id);
+                        const isTerminalEvent = terminalEventStatuses.includes(event.status);
                         return (
                           <div key={event.id} className="p-4 bg-white">
                             <div className="flex justify-between items-center mb-3">
@@ -448,7 +484,9 @@ const Dashboard = ({ user, archives, events, orders, onNewArchive, onEditArchive
                                 </div>
                               ))}
                             </div>
-                            <button onClick={() => onNewOrder(event.id)} className="w-full py-2.5 border border-dashed border-blue-200 text-blue-600 rounded-xl text-sm font-medium hover:bg-blue-50">+ 新增检验订单</button>
+                            <button onClick={() => onNewOrder(event)} className="w-full py-2.5 border border-dashed border-blue-200 text-blue-600 rounded-xl text-sm font-medium hover:bg-blue-50">
+                              {isTerminalEvent ? '+ 新申请检验（新筛查事件）' : '+ 新增检验订单'}
+                            </button>
                           </div>
                         )
                       })}
@@ -467,6 +505,7 @@ const Dashboard = ({ user, archives, events, orders, onNewArchive, onEditArchive
 // --- Report View (For completed & recall_pending) ---
 const ReportView = ({ order, event, archive, onBack, onNewRetest }: any) => {
   const isAbnormal = order.status === 'recall_pending';
+  const canCreateRetest = isAbnormal && !order?.retestRequested;
   return (
     <div className="min-h-screen bg-slate-100 pb-20">
       <div className="sticky top-0 bg-white/80 backdrop-blur-md px-4 py-3 flex items-center gap-3 border-b border-slate-200 z-50">
@@ -525,7 +564,7 @@ const ReportView = ({ order, event, archive, onBack, onNewRetest }: any) => {
           </div>
         </div>
 
-        {isAbnormal && (
+        {canCreateRetest && (
           <button onClick={() => onNewRetest(event?.id)} className="w-full py-4 mt-6 bg-rose-600 text-white rounded-xl font-bold shadow-lg shadow-rose-600/30 hover:bg-rose-700 transition-all flex justify-center items-center gap-2">
             <Plus size={20}/> 新增复查项目订单
           </button>
@@ -538,7 +577,8 @@ const ReportView = ({ order, event, archive, onBack, onNewRetest }: any) => {
 
 // --- App Root ---
 export default function App() {
-  const [view, setView] = useState('login');
+  const [viewStack, setViewStack] = useState<string[]>(['login']);
+  const view = viewStack[viewStack.length - 1];
   const [user, setUser] = useState<any>(null);
   
   const [archives, setArchives] = useState<any[]>([
@@ -556,25 +596,42 @@ export default function App() {
   const [activeArchive, setActiveArchive] = useState<any>(null);
   const [activeOrder, setActiveOrder] = useState<any>(null);
 
+  const navigate = (nextView: string, options: { replace?: boolean; reset?: boolean } = {}) => {
+    setViewStack((prev) => {
+      if (options.reset) return [nextView];
+      if (options.replace) return [...prev.slice(0, -1), nextView];
+      return [...prev, nextView];
+    });
+  };
+
+  const goBack = (fallbackView = 'dashboard') => {
+    setViewStack((prev) => (prev.length > 1 ? prev.slice(0, -1) : [fallbackView]));
+  };
+
   const handleOrderAction = (order: any) => {
     setActiveOrder(order);
     // routes 're_sampling' into step3 to reuse the form
-    setView(order.status === 're_sampling' ? 'step3' : order.status);
+    navigate(order.status === 're_sampling' ? 'step3' : order.status);
   };
 
   const updateOrder = (updates: any, nextView: string = 'dashboard') => {
     setOrders(orders.map(o => o.id === updates.id ? updates : o));
     setActiveOrder(updates);
-    setView(nextView);
+    navigate(nextView, nextView === 'dashboard' ? { reset: true } : { replace: true });
   };
 
-  if (view === 'login') return <LoginPage onLogin={(u) => { setUser(u); setView('dashboard'); }} />;
+  if (view === 'login') return <LoginPage onLogin={(u) => { setUser(u); navigate('dashboard', { reset: true }); }} />;
   if (view === 'dashboard') return (
     <Dashboard user={user} archives={archives} events={events} orders={orders} 
-      onLogout={() => setView('login')}
-      onNewArchive={() => { setActiveArchive(null); setView('archiveEdit'); }}
-      onEditArchive={(a: any) => { setActiveArchive(a); setView('archiveEdit'); }}
-      onNewOrder={(eventId: string) => {
+      onLogout={() => navigate('login', { reset: true })}
+      onNewArchive={() => { setActiveArchive(null); navigate('archiveEdit'); }}
+      onEditArchive={(a: any) => { setActiveArchive(a); navigate('archiveEdit'); }}
+      onNewOrder={(event: any) => {
+        const shouldCreateNewEvent = terminalEventStatuses.includes(event.status);
+        const eventId = shouldCreateNewEvent ? `e_${Date.now()}` : event.id;
+        if (shouldCreateNewEvent) {
+          setEvents([...events, { id: eventId, archiveId: event.archiveId, title: `${event.title}-新申请`, status: '待筛查' }]);
+        }
         const newOrder = { id: 'order_' + Date.now().toString().slice(-6), eventId, status: 'step1' };
         setOrders([...orders, newOrder]);
         handleOrderAction(newOrder);
@@ -583,14 +640,14 @@ export default function App() {
     />
   );
   if (view === 'archiveEdit') return (
-    <ArchiveEdit archive={activeArchive} onBack={() => setView('dashboard')} onSave={(a: any) => {
+    <ArchiveEdit archive={activeArchive} onBack={() => goBack()} onSave={(a: any) => {
       const isNew = !activeArchive;
       setArchives(isNew ? [...archives, a] : archives.map(arch => arch.id === a.id ? a : arch));
       // Optionally auto-create an event if it's a new archive
       if (isNew) {
         setEvents([...events, { id: 'e_' + Date.now(), archiveId: a.id, title: '常规新生儿遗传病筛查', status: '待筛查' }]);
       }
-      setView('dashboard');
+      navigate('dashboard', { reset: true });
     }}/>
   );
 
@@ -598,20 +655,21 @@ export default function App() {
   const eventRef = activeOrder ? events.find(e => e.id === activeOrder.eventId) : null;
   const archiveRef = eventRef ? archives.find(a => a.id === eventRef.archiveId) : null;
   
-  if (view === 'step1') return <OrderStep1 archive={archiveRef} orderData={activeOrder} onBack={() => setView('dashboard')} 
+  if (view === 'step1') return <OrderStep1 archive={archiveRef} orderData={activeOrder} onBack={() => goBack()} 
     onSaveDraft={(data: any) => updateOrder({...activeOrder, ...data, status: 'step1'}, 'dashboard')} 
     onNext={(data: any) => {
       setArchives(archives.map(a => a.id === archiveRef?.id ? { ...a, ...data } : a));
       updateOrder({...activeOrder, ...data, status: 'step2'}, 'step2');
     }}
   />;
-  if (view === 'step2') return <OrderStep2 orderData={activeOrder} onBack={() => setView('step1')} 
+  if (view === 'step2') return <OrderStep2 orderData={activeOrder} onBack={() => goBack()} 
     onSaveDraft={(data: any) => updateOrder({...activeOrder, ...data, status: 'step2'}, 'dashboard')}
     onNext={(data: any) => {
       updateOrder({...activeOrder, ...data, status: 'step3'}, 'step3');
     }}
+    onRefund={(data: any) => updateOrder(data, 'step2')}
   />;
-  if (view === 'step3') return <OrderStep3 archive={archiveRef} orderData={activeOrder} onBack={() => setView('step2')} onComplete={(data: any) => updateOrder({...activeOrder, ...data, status: 'processing'}, 'processing')} />;
+  if (view === 'step3') return <OrderStep3 archive={archiveRef} orderData={activeOrder} onBack={() => goBack()} onComplete={(data: any) => updateOrder({...activeOrder, ...data, status: 'processing'}, 'processing')} />;
   
   // generic fallback for processing/completed
   if (view === 'processing' || view === 'completed' || view === 'recall_pending') {
@@ -620,14 +678,15 @@ export default function App() {
         <Loader2 size={64} className="text-blue-500 mb-4 animate-spin" />
         <h2 className="text-xl font-bold mb-6 text-slate-800">检测正在进行中</h2>
         <p className="text-slate-500 mb-8 text-center text-sm">实验室已接收样本，正在化验分析，请耐心等待。</p>
-        <button onClick={() => setView('dashboard')} className="px-8 py-3 bg-white border border-slate-200 text-slate-700 font-medium rounded-xl shadow-sm">返回首页</button>
+        <button onClick={() => navigate('dashboard', { reset: true })} className="px-8 py-3 bg-white border border-slate-200 text-slate-700 font-medium rounded-xl shadow-sm">返回首页</button>
       </div>
     );
 
-    return <ReportView order={activeOrder} event={eventRef} archive={archiveRef} onBack={() => setView('dashboard')} 
+    return <ReportView order={activeOrder} event={eventRef} archive={archiveRef} onBack={() => goBack()} 
       onNewRetest={(eventId: string) => {
         const newOrder = { id: 'order_retest_' + Date.now().toString().slice(-6), eventId, status: 'step1' };
-        setOrders([...orders, newOrder]);
+        setOrders(orders.map((o) => (o.id === activeOrder?.id ? { ...o, retestRequested: true } : o)).concat(newOrder));
+        setActiveOrder({ ...activeOrder, retestRequested: true });
         handleOrderAction(newOrder);
       }} 
     />;
